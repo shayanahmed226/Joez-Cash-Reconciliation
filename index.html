@@ -43,23 +43,7 @@ h3{font-size:11px!important;margin:7px 0 3px!important}
 .result{padding:8px!important}
 .result .big{font-size:20px!important}
 }
-#receiptPrint{display:none}
-@media print{
-body.receipt-mode *{visibility:hidden!important}
-body.receipt-mode #receiptPrint,body.receipt-mode #receiptPrint *{visibility:visible!important}
-body.receipt-mode{margin:0!important;padding:0!important;background:#fff!important}
-body.receipt-mode #receiptPrint{
-display:block!important;position:absolute!important;left:0!important;top:0!important;
-width:80mm!important;min-width:80mm!important;max-width:80mm!important;
-height:auto!important;margin:0!important;padding:1.5mm 2mm!important;
-box-sizing:border-box!important;font-family:'Poppins',Arial,sans-serif!important;
-font-size:9px!important;line-height:1.18!important;color:#000!important;
-background:#fff!important;overflow:visible!important;
-page-break-before:avoid!important;page-break-after:avoid!important;
-break-before:avoid!important;break-after:avoid!important;
-}
-body.receipt-mode #receiptPrint *{page-break-before:avoid!important;page-break-after:avoid!important;break-before:avoid!important;break-after:avoid!important}
-}</style>
+</style>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
 body,input,button,select{font-family:'Poppins',Arial,sans-serif}
@@ -220,23 +204,119 @@ function currentCalc(){
  const cashSale=sale-online-card-panda-pending,expected=opening+cashSale-expense-worker;
  return {sale,opening,actual,online,card,panda,pending,expense,worker,cashSale,expected,diff:actual-expected};
 }
+
+function buildPrintBase(title, pageCss, bodyHtml){
+ const w=window.open('','_blank','width=900,height=900');
+ if(!w){alert('Please allow pop-ups for Joe\'z Cash Reconciliation to print.');return null;}
+ w.document.open();
+ w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
+ <style>
+ @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+ *{box-sizing:border-box}
+ html,body{margin:0;padding:0;background:#fff;color:#000;font-family:'Poppins',Arial,sans-serif}
+ ${pageCss}
+ </style></head><body>${bodyHtml}</body></html>`);
+ w.document.close();
+ return w;
+}
 function printA4(){
- document.body.classList.remove('receipt-mode');
- let s=document.getElementById('a4PrintStyle');
- if(!s){s=document.createElement('style');s.id='a4PrintStyle';s.textContent='@media print{@page{size:A4 portrait;margin:6mm}}';document.head.appendChild(s);}
- window.print();
+ const c=currentCalc(),date=document.getElementById('date').value||'';
+ const status=c.diff>0?`EXTRA CASH +${money(c.diff)}`:c.diff<0?`SHORT CASH -${money(Math.abs(c.diff))}`:'MATCHED';
+ const expenses=getItems('expense'), workers=getItems('worker');
+ const expenseHtml=expenses.map(x=>`<tr><td>${esc(x.desc||'Expense')}</td><td>${money(x.amount)}</td></tr>`).join('')||'<tr><td>None</td><td>Rs. 0</td></tr>';
+ const workerHtml=workers.map(x=>`<tr><td>${esc(x.desc||'Worker')}</td><td>${money(x.amount)}</td></tr>`).join('')||'<tr><td>None</td><td>Rs. 0</td></tr>';
+ const body=`<main class="a4">
+   <div class="head"><div class="brand">JOE'Z</div><div class="title">Cash Reconciliation</div><div class="date">${esc(date)}</div></div>
+   <div class="summary">
+    <div><span>Total Sale</span><b>${money(c.sale)}</b></div>
+    <div><span>Cash Sale</span><b>${money(c.cashSale)}</b></div>
+    <div><span>Opening Cash</span><b>${money(c.opening)}</b></div>
+    <div><span>Expected Cash</span><b>${money(c.expected)}</b></div>
+    <div><span>Actual Cash</span><b>${money(c.actual)}</b></div>
+    <div class="status"><span>Result</span><b>${status}</b></div>
+   </div>
+   <section><h2>Payment Breakdown</h2><table><tr><td>Total Sale</td><td>${money(c.sale)}</td></tr><tr><td>Online Payment</td><td>${money(c.online)}</td></tr><tr><td>Card Payment</td><td>${money(c.card)}</td></tr><tr><td>Foodpanda</td><td>${money(c.panda)}</td></tr><tr><td>Pending Amount</td><td>${money(c.pending)}</td></tr><tr class="strong"><td>Cash Collected</td><td>${money(c.cashSale)}</td></tr></table></section>
+   <section><h2>Expenses</h2><table>${expenseHtml}<tr class="strong"><td>Total Expenses</td><td>${money(c.expense)}</td></tr></table></section>
+   <section><h2>Joe'z Worker</h2><table>${workerHtml}<tr class="strong"><td>Total Worker</td><td>${money(c.worker)}</td></tr></table></section>
+   <div class="footerline">Joe'z Cash Reconciliation • Printed ${new Date().toLocaleString()}</div>
+ </main>`;
+ const w=buildPrintBase("Joe'z Cash Reconciliation",`
+ @page{size:A4 portrait;margin:7mm}
+ .a4{width:100%;font-size:10px}
+ .head{text-align:center;border-bottom:2px solid #111;padding-bottom:7px;margin-bottom:10px}
+ .brand{font-size:24px;font-weight:800;line-height:1}
+ .title{font-size:14px;font-weight:700;text-transform:uppercase;margin-top:2px}
+ .date{font-size:9px;margin-top:2px}
+ .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:9px}
+ .summary>div{border:1px solid #bbb;border-radius:5px;padding:6px 7px;display:flex;justify-content:space-between;gap:6px}
+ .summary span{font-size:9px}.summary b{font-size:10px}
+ .status b{font-weight:800}
+ section{margin:0 0 8px;border:1px solid #bbb;border-radius:5px;overflow:hidden}
+ h2{font-size:10px;margin:0;padding:5px 7px;border-bottom:1px solid #bbb;text-transform:uppercase}
+ table{width:100%;border-collapse:collapse}
+ td{padding:3px 7px;border-bottom:1px solid #e3e3e3}
+ td:last-child{text-align:right;font-weight:600}
+ tr:last-child td{border-bottom:0}
+ .strong td{font-weight:800;border-top:1px solid #999}
+ .footerline{text-align:center;font-size:7px;margin-top:7px;color:#555}
+ section,.summary{break-inside:avoid;page-break-inside:avoid}
+ `,body);
+ if(!w)return;
+ w.onload=()=>setTimeout(()=>{w.focus();w.print();setTimeout(()=>w.close(),500)},150);
 }
 function printReceipt(){
- let s=document.getElementById('thermalPrintStyle');
- if(!s){s=document.createElement('style');s.id='thermalPrintStyle';s.textContent='@media print{@page{size:80mm auto;margin:0}}';document.head.appendChild(s);}
-  // Thermal receipt: 80mm roll, content-height driven by the browser/driver.
  const c=currentCalc(),date=document.getElementById('date').value||'';
- const status=c.diff>0?`<b>EXTRA CASH: ${money(c.diff)}</b>`:c.diff<0?`<b>SHORT CASH: ${money(Math.abs(c.diff))}</b>`:'<b>MATCHED</b>';
- const expenseLines=getItems('expense').map(x=>`${esc(x.desc||'Expense')}: ${money(x.amount)}`).join('<br>')||'None';
- document.getElementById('receiptPrint').innerHTML=`<div style="text-align:center;font-weight:800;font-size:14px;line-height:1.1">JOE'Z</div><div style="text-align:center;font-size:9px;line-height:1.1">CASH RECONCILIATION</div><div style="border-top:1px dashed #000;margin:5px 0"></div>Date: ${esc(date)}<div style="border-top:1px dashed #000;margin:5px 0"></div><b>SALES</b><br>Total Sale: ${money(c.sale)}<br>Online: ${money(c.online)}<br>Card: ${money(c.card)}<br>Foodpanda: ${money(c.panda)}<br>Pending: ${money(c.pending)}<br>Cash Sale: ${money(c.cashSale)}<br><br><b>EXPENSES</b><br>${expenseLines}<br>Worker: ${money(c.worker)}<br><div style="border-top:1px dashed #000;margin:5px 0"></div>Opening Cash: ${money(c.opening)}<br>Expected Cash: ${money(c.expected)}<br>Actual Cash: ${money(c.actual)}<br><div style="border-top:1px dashed #000;margin:5px 0"></div>${status}<div style="border-top:1px dashed #000;margin:7px 0"></div><div style="text-align:center">Joe'z</div>`;
- document.body.classList.add('receipt-mode');
- window.print();
- setTimeout(()=>{document.body.classList.remove('receipt-mode');document.getElementById('receiptPrint').innerHTML='';},700);
+ const status=c.diff>0?`EXTRA CASH: +${money(c.diff)}`:c.diff<0?`SHORT CASH: -${money(Math.abs(c.diff))}`:'MATCHED';
+ const expenses=getItems('expense'), workers=getItems('worker');
+ const expenseHtml=expenses.map(x=>`<div class="row"><span>${esc(x.desc||'Expense')}</span><b>${money(x.amount)}</b></div>`).join('')||'<div class="row"><span>None</span><b>Rs. 0</b></div>';
+ const workerHtml=workers.map(x=>`<div class="row"><span>${esc(x.desc||'Worker')}</span><b>${money(x.amount)}</b></div>`).join('')||'<div class="row"><span>None</span><b>Rs. 0</b></div>';
+ const body=`<main class="receipt">
+  <div class="brand">JOE'Z</div><div class="sub">CASH RECONCILIATION</div><div class="line"></div>
+  <div class="row"><span>Date</span><b>${esc(date)}</b></div><div class="line"></div>
+  <div class="section">SALES</div>
+  <div class="row"><span>Total Sale</span><b>${money(c.sale)}</b></div>
+  <div class="row"><span>Online</span><b>${money(c.online)}</b></div>
+  <div class="row"><span>Card</span><b>${money(c.card)}</b></div>
+  <div class="row"><span>Foodpanda</span><b>${money(c.panda)}</b></div>
+  <div class="row"><span>Pending</span><b>${money(c.pending)}</b></div>
+  <div class="row total"><span>Cash Sale</span><b>${money(c.cashSale)}</b></div>
+  <div class="line"></div><div class="section">EXPENSES</div>${expenseHtml}
+  <div class="row total"><span>Total Expenses</span><b>${money(c.expense)}</b></div>
+  <div class="line"></div><div class="section">WORKER</div>${workerHtml}
+  <div class="row total"><span>Worker Total</span><b>${money(c.worker)}</b></div>
+  <div class="line"></div>
+  <div class="row"><span>Opening Cash</span><b>${money(c.opening)}</b></div>
+  <div class="row"><span>Expected Cash</span><b>${money(c.expected)}</b></div>
+  <div class="row"><span>Actual Cash</span><b>${money(c.actual)}</b></div>
+  <div class="result">${status}</div>
+  <div class="cut">---------------- CUT ----------------</div>
+ </main>`;
+ const w=buildPrintBase("Joe'z Receipt",`
+ @page{size:80mm auto;margin:0}
+ body{width:80mm;margin:0!important;padding:0!important}
+ .receipt{width:80mm;padding:2mm 3mm 1mm;font-size:9px;line-height:1.2}
+ .brand{text-align:center;font-size:17px;font-weight:800;line-height:1}
+ .sub{text-align:center;font-size:8px;font-weight:600;margin-top:2px}
+ .line{border-top:1px dashed #000;margin:4px 0}
+ .section{font-weight:800;font-size:9px;margin:2px 0}
+ .row{display:flex;justify-content:space-between;gap:5px;min-height:13px}
+ .row span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+ .row b{white-space:nowrap}
+ .total{font-weight:800;border-top:1px solid #000;margin-top:2px;padding-top:2px}
+ .result{text-align:center;font-size:10px;font-weight:800;border:1px solid #000;padding:4px;margin-top:5px}
+ .cut{text-align:center;font-size:7px;margin-top:5px;white-space:nowrap}
+ `,body);
+ if(!w)return;
+ w.onload=()=>{
+   setTimeout(()=>{
+     // Measure only the receipt and request a page height close to the actual content.
+     const h=Math.ceil(w.document.querySelector('.receipt').getBoundingClientRect().height/3.7795)+5;
+     const st=w.document.createElement('style');
+     st.textContent=`@media print{@page{size:80mm ${Math.max(45,h)}mm;margin:0}}`;
+     w.document.head.appendChild(st);
+     w.focus();w.print();setTimeout(()=>w.close(),500);
+   },200);
+ };
 }
 
 document.getElementById('date').value=new Date().toISOString().slice(0,10);
