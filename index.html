@@ -205,118 +205,159 @@ function currentCalc(){
  return {sale,opening,actual,online,card,panda,pending,expense,worker,cashSale,expected,diff:actual-expected};
 }
 
-function buildPrintBase(title, pageCss, bodyHtml){
- const w=window.open('','_blank','width=900,height=900');
- if(!w){alert('Please allow pop-ups for Joe\'z Cash Reconciliation to print.');return null;}
- w.document.open();
- w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
+function makePrintFrame(title, htmlBody, css, pageRule, callback){
+ const old=document.getElementById('joezPrintFrame');
+ if(old) old.remove();
+ const frame=document.createElement('iframe');
+ frame.id='joezPrintFrame';
+ frame.setAttribute('aria-hidden','true');
+ frame.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+ document.body.appendChild(frame);
+ const doc=frame.contentDocument;
+ doc.open();
+ doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
  <style>
  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
  *{box-sizing:border-box}
  html,body{margin:0;padding:0;background:#fff;color:#000;font-family:'Poppins',Arial,sans-serif}
- ${pageCss}
- </style></head><body>${bodyHtml}</body></html>`);
- w.document.close();
- return w;
+ ${pageRule}
+ ${css}
+ </style></head><body>${htmlBody}</body></html>`);
+ doc.close();
+
+ const run=()=>{
+   setTimeout(()=>{
+     try{callback(frame,doc)}catch(e){console.error(e)}
+   },120);
+ };
+ if(frame.contentWindow.document.readyState==='complete') run();
+ else frame.onload=run;
+ return frame;
 }
+
+function cleanupPrintFrame(frame){
+ setTimeout(()=>{if(frame&&frame.parentNode)frame.remove()},1000);
+}
+
 function printA4(){
  const c=currentCalc(),date=document.getElementById('date').value||'';
  const status=c.diff>0?`EXTRA CASH +${money(c.diff)}`:c.diff<0?`SHORT CASH -${money(Math.abs(c.diff))}`:'MATCHED';
- const expenses=getItems('expense'), workers=getItems('worker');
+ const expenses=getItems('expense'),workers=getItems('worker');
  const expenseHtml=expenses.map(x=>`<tr><td>${esc(x.desc||'Expense')}</td><td>${money(x.amount)}</td></tr>`).join('')||'<tr><td>None</td><td>Rs. 0</td></tr>';
  const workerHtml=workers.map(x=>`<tr><td>${esc(x.desc||'Worker')}</td><td>${money(x.amount)}</td></tr>`).join('')||'<tr><td>None</td><td>Rs. 0</td></tr>';
+
  const body=`<main class="a4">
-   <div class="head"><div class="brand">JOE'Z</div><div class="title">Cash Reconciliation</div><div class="date">${esc(date)}</div></div>
-   <div class="summary">
-    <div><span>Total Sale</span><b>${money(c.sale)}</b></div>
-    <div><span>Cash Sale</span><b>${money(c.cashSale)}</b></div>
-    <div><span>Opening Cash</span><b>${money(c.opening)}</b></div>
-    <div><span>Expected Cash</span><b>${money(c.expected)}</b></div>
-    <div><span>Actual Cash</span><b>${money(c.actual)}</b></div>
-    <div class="status"><span>Result</span><b>${status}</b></div>
-   </div>
-   <section><h2>Payment Breakdown</h2><table><tr><td>Total Sale</td><td>${money(c.sale)}</td></tr><tr><td>Online Payment</td><td>${money(c.online)}</td></tr><tr><td>Card Payment</td><td>${money(c.card)}</td></tr><tr><td>Foodpanda</td><td>${money(c.panda)}</td></tr><tr><td>Pending Amount</td><td>${money(c.pending)}</td></tr><tr class="strong"><td>Cash Collected</td><td>${money(c.cashSale)}</td></tr></table></section>
-   <section><h2>Expenses</h2><table>${expenseHtml}<tr class="strong"><td>Total Expenses</td><td>${money(c.expense)}</td></tr></table></section>
-   <section><h2>Joe'z Worker</h2><table>${workerHtml}<tr class="strong"><td>Total Worker</td><td>${money(c.worker)}</td></tr></table></section>
-   <div class="footerline">Joe'z Cash Reconciliation • Printed ${new Date().toLocaleString()}</div>
+  <header><div class="brand">JOE'Z</div><div class="title">CASH RECONCILIATION</div><div class="date">${esc(date)}</div></header>
+  <div class="summary">
+   <div><span>Total Sale</span><b>${money(c.sale)}</b></div>
+   <div><span>Cash Sale</span><b>${money(c.cashSale)}</b></div>
+   <div><span>Opening Cash</span><b>${money(c.opening)}</b></div>
+   <div><span>Expected Cash</span><b>${money(c.expected)}</b></div>
+   <div><span>Actual Cash</span><b>${money(c.actual)}</b></div>
+   <div><span>Result</span><b>${status}</b></div>
+  </div>
+  <section><h2>Payment Breakdown</h2><table>
+   <tr><td>Total Sale</td><td>${money(c.sale)}</td></tr>
+   <tr><td>Online Payment</td><td>${money(c.online)}</td></tr>
+   <tr><td>Card Payment</td><td>${money(c.card)}</td></tr>
+   <tr><td>Foodpanda</td><td>${money(c.panda)}</td></tr>
+   <tr><td>Pending Amount</td><td>${money(c.pending)}</td></tr>
+   <tr class="strong"><td>Cash Collected</td><td>${money(c.cashSale)}</td></tr>
+  </table></section>
+  <section><h2>Expenses</h2><table>${expenseHtml}<tr class="strong"><td>Total Expenses</td><td>${money(c.expense)}</td></tr></table></section>
+  <section><h2>Joe'z Worker</h2><table>${workerHtml}<tr class="strong"><td>Total Worker</td><td>${money(c.worker)}</td></tr></table></section>
+  <div class="footerline">Joe'z Cash Reconciliation • ${new Date().toLocaleString()}</div>
  </main>`;
- const w=buildPrintBase("Joe'z Cash Reconciliation",`
+
+ const css=`
  @page{size:A4 portrait;margin:7mm}
- .a4{width:100%;font-size:10px}
- .head{text-align:center;border-bottom:2px solid #111;padding-bottom:7px;margin-bottom:10px}
- .brand{font-size:24px;font-weight:800;line-height:1}
- .title{font-size:14px;font-weight:700;text-transform:uppercase;margin-top:2px}
- .date{font-size:9px;margin-top:2px}
- .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:9px}
- .summary>div{border:1px solid #bbb;border-radius:5px;padding:6px 7px;display:flex;justify-content:space-between;gap:6px}
- .summary span{font-size:9px}.summary b{font-size:10px}
- .status b{font-weight:800}
- section{margin:0 0 8px;border:1px solid #bbb;border-radius:5px;overflow:hidden}
- h2{font-size:10px;margin:0;padding:5px 7px;border-bottom:1px solid #bbb;text-transform:uppercase}
+ body{width:196mm}
+ .a4{width:196mm;font-size:10px}
+ header{text-align:center;border-bottom:2px solid #111;padding:4px 0 7px;margin-bottom:8px}
+ .brand{font-size:23px;font-weight:800;line-height:1}
+ .title{font-size:13px;font-weight:700;margin-top:2px}
+ .date{font-size:8px;margin-top:2px}
+ .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:7px}
+ .summary>div{border:1px solid #aaa;border-radius:4px;padding:5px 6px;display:flex;justify-content:space-between;gap:5px}
+ .summary span{font-size:8px}.summary b{font-size:9px}
+ section{margin:0 0 6px;border:1px solid #aaa;border-radius:4px;overflow:hidden;break-inside:avoid;page-break-inside:avoid}
+ h2{font-size:9px;margin:0;padding:4px 6px;border-bottom:1px solid #aaa}
  table{width:100%;border-collapse:collapse}
- td{padding:3px 7px;border-bottom:1px solid #e3e3e3}
+ td{padding:2.5px 6px;border-bottom:1px solid #e5e5e5}
  td:last-child{text-align:right;font-weight:600}
  tr:last-child td{border-bottom:0}
- .strong td{font-weight:800;border-top:1px solid #999}
- .footerline{text-align:center;font-size:7px;margin-top:7px;color:#555}
- section,.summary{break-inside:avoid;page-break-inside:avoid}
- `,body);
- if(!w)return;
- w.onload=()=>setTimeout(()=>{w.focus();w.print();setTimeout(()=>w.close(),500)},150);
+ .strong td{font-weight:800;border-top:1px solid #888}
+ .footerline{text-align:center;font-size:6.5px;margin-top:5px}
+ `;
+ makePrintFrame("Joe'z Cash Reconciliation",body,css,'@page{size:A4 portrait;margin:7mm}',(frame)=>{
+   const win=frame.contentWindow;
+   win.focus();
+   setTimeout(()=>{win.print();cleanupPrintFrame(frame)},100);
+ });
 }
+
 function printReceipt(){
  const c=currentCalc(),date=document.getElementById('date').value||'';
- const status=c.diff>0?`EXTRA CASH: +${money(c.diff)}`:c.diff<0?`SHORT CASH: -${money(Math.abs(c.diff))}`:'MATCHED';
- const expenses=getItems('expense'), workers=getItems('worker');
+ const status=c.diff>0?`EXTRA CASH +${money(c.diff)}`:c.diff<0?`SHORT CASH -${money(Math.abs(c.diff))}`:'MATCHED';
+ const expenses=getItems('expense'),workers=getItems('worker');
  const expenseHtml=expenses.map(x=>`<div class="row"><span>${esc(x.desc||'Expense')}</span><b>${money(x.amount)}</b></div>`).join('')||'<div class="row"><span>None</span><b>Rs. 0</b></div>';
  const workerHtml=workers.map(x=>`<div class="row"><span>${esc(x.desc||'Worker')}</span><b>${money(x.amount)}</b></div>`).join('')||'<div class="row"><span>None</span><b>Rs. 0</b></div>';
+
  const body=`<main class="receipt">
-  <div class="brand">JOE'Z</div><div class="sub">CASH RECONCILIATION</div><div class="line"></div>
-  <div class="row"><span>Date</span><b>${esc(date)}</b></div><div class="line"></div>
+  <div class="brand">JOE'Z</div>
+  <div class="sub">CASH RECONCILIATION</div>
+  <div class="line"></div>
+  <div class="row"><span>Date</span><b>${esc(date)}</b></div>
+  <div class="line"></div>
   <div class="section">SALES</div>
   <div class="row"><span>Total Sale</span><b>${money(c.sale)}</b></div>
-  <div class="row"><span>Online</span><b>${money(c.online)}</b></div>
-  <div class="row"><span>Card</span><b>${money(c.card)}</b></div>
+  <div class="row"><span>Online Payment</span><b>${money(c.online)}</b></div>
+  <div class="row"><span>Card Payment</span><b>${money(c.card)}</b></div>
   <div class="row"><span>Foodpanda</span><b>${money(c.panda)}</b></div>
-  <div class="row"><span>Pending</span><b>${money(c.pending)}</b></div>
+  <div class="row"><span>Pending Amount</span><b>${money(c.pending)}</b></div>
   <div class="row total"><span>Cash Sale</span><b>${money(c.cashSale)}</b></div>
-  <div class="line"></div><div class="section">EXPENSES</div>${expenseHtml}
+  <div class="line"></div>
+  <div class="section">EXPENSES</div>
+  ${expenseHtml}
   <div class="row total"><span>Total Expenses</span><b>${money(c.expense)}</b></div>
-  <div class="line"></div><div class="section">WORKER</div>${workerHtml}
+  <div class="line"></div>
+  <div class="section">JOE'Z WORKER</div>
+  ${workerHtml}
   <div class="row total"><span>Worker Total</span><b>${money(c.worker)}</b></div>
   <div class="line"></div>
   <div class="row"><span>Opening Cash</span><b>${money(c.opening)}</b></div>
   <div class="row"><span>Expected Cash</span><b>${money(c.expected)}</b></div>
   <div class="row"><span>Actual Cash</span><b>${money(c.actual)}</b></div>
   <div class="result">${status}</div>
-  <div class="cut">---------------- CUT ----------------</div>
+  <div class="cut">✂ CUT HERE ✂</div>
  </main>`;
- const w=buildPrintBase("Joe'z Receipt",`
- @page{size:80mm auto;margin:0}
- body{width:80mm;margin:0!important;padding:0!important}
- .receipt{width:80mm;padding:2mm 3mm 1mm;font-size:9px;line-height:1.2}
+
+ const css=`
+ body{width:80mm;margin:0;padding:0}
+ .receipt{width:80mm;padding:2mm 3mm 1mm;font-size:9px;line-height:1.18}
  .brand{text-align:center;font-size:17px;font-weight:800;line-height:1}
  .sub{text-align:center;font-size:8px;font-weight:600;margin-top:2px}
- .line{border-top:1px dashed #000;margin:4px 0}
- .section{font-weight:800;font-size:9px;margin:2px 0}
+ .line{border-top:1px dashed #000;margin:3.5px 0}
+ .section{font-weight:800;font-size:9px;margin:2px 0 1px}
  .row{display:flex;justify-content:space-between;gap:5px;min-height:13px}
  .row span{min-width:0;overflow:hidden;text-overflow:ellipsis}
  .row b{white-space:nowrap}
- .total{font-weight:800;border-top:1px solid #000;margin-top:2px;padding-top:2px}
- .result{text-align:center;font-size:10px;font-weight:800;border:1px solid #000;padding:4px;margin-top:5px}
- .cut{text-align:center;font-size:7px;margin-top:5px;white-space:nowrap}
- `,body);
- if(!w)return;
- w.onload=()=>{
-   setTimeout(()=>{
-     // Measure only the receipt and request a page height close to the actual content.
-     const h=Math.ceil(w.document.querySelector('.receipt').getBoundingClientRect().height/3.7795)+5;
-     const st=w.document.createElement('style');
-     st.textContent=`@media print{@page{size:80mm ${Math.max(45,h)}mm;margin:0}}`;
-     w.document.head.appendChild(st);
-     w.focus();w.print();setTimeout(()=>w.close(),500);
-   },200);
- };
+ .total{font-weight:800;border-top:1px solid #000;padding-top:2px;margin-top:2px}
+ .result{text-align:center;font-weight:800;border:1px solid #000;margin-top:5px;padding:4px 2px}
+ .cut{text-align:center;font-size:7px;font-weight:700;margin-top:6px;padding-top:4px;border-top:1px dashed #000}
+ `;
+
+ const frame=makePrintFrame("Joe'z Receipt",body,css,'@page{size:80mm auto;margin:0}',(frame,doc)=>{
+   // Calculate the actual receipt height and create a custom page height.
+   const receipt=doc.querySelector('.receipt');
+   const pxPerMm=96/25.4;
+   const heightMm=Math.max(45,Math.ceil(receipt.getBoundingClientRect().height/pxPerMm)+2);
+   const pageStyle=doc.createElement('style');
+   pageStyle.textContent=`@page{size:80mm ${heightMm}mm;margin:0}html,body{width:80mm!important;margin:0!important;padding:0!important}`;
+   doc.head.appendChild(pageStyle);
+   frame.contentWindow.focus();
+   setTimeout(()=>{frame.contentWindow.print();cleanupPrintFrame(frame)},100);
+ });
 }
 
 document.getElementById('date').value=new Date().toISOString().slice(0,10);
